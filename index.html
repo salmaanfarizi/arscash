@@ -782,6 +782,26 @@ if ('serviceWorker' in navigator) {
   </div>
 <script src="config.js"></script>
 <script>
+// Single place to call Apps Script without triggering CORS preflight
+async function callAppsScript(action, payload = {}) {
+  const params = new URLSearchParams();
+  params.append('action', action);
+  params.append('payload', JSON.stringify(payload));
+
+  const res = await fetch(CONFIG.GOOGLE_SCRIPT_URL /* must be /exec */, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+    body: params.toString()
+    // IMPORTANT: no other headers (Authorization, X-*, etc.)
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Apps Script error (${res.status}): ${text}`);
+  }
+  return res.json(); // { status, success, data, timestamp }
+}
+
   // Enhanced Cash Reconciliation App with robust error handling
   class CashReconciliationApp {
     constructor() {
@@ -843,18 +863,18 @@ if ('serviceWorker' in navigator) {
       }
       
       async checkConnection() {
-        try {
-          const response = await this.fetchWithRetry(`${this.WEBHOOK_URL}?action=ping`);
-          const data = await response.json();
-          if (data.success) {
-            this.updateSyncStatus('connected');
-          } else {
-            throw new Error('Connection failed');
-          }
-        } catch (error) {
-          this.updateSyncStatus('disconnected');
-        }
-      }
+  try {
+    const data = await callAppsScript('ping');
+    if (data.success || data.status === 'success') {
+      this.updateSyncStatus('connected');
+    } else {
+      throw new Error('Connection failed');
+    }
+  } catch {
+    this.updateSyncStatus('disconnected');
+  }
+}
+
       async fetchWithRetry(url, options = {}, attempt = 1) {
     try {
         const controller = new AbortController();
@@ -1083,53 +1103,47 @@ if ('serviceWorker' in navigator) {
       }
       
       async fetchInventoryData() {
-        if (!this.currentRoute) {
-          return this.showStatus('Please select a route first!', 'error');
-        }
-        
-        const salesDate = this.getValue('salesDate');
-        if (!salesDate) {
-          return this.showStatus('Please select a date!', 'error');
-        }
-        
-        // Calculate previous day
-        const cur = new Date(salesDate);
-        const prev = new Date(cur);
-        prev.setDate(prev.getDate() - 1);
-        const prevStr = prev.toISOString().split('T')[0];
-        
-        this.showStatus('Fetching inventory data…', 'info');
-        this.showLoading(true);
-        document.getElementById('fetchBtn').disabled = true;
-        
-        try {
-          const res = await this.fetchWithRetry(this.WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'calculateSalesFromInventory',
-              route: this.currentRoute,
-              currentDate: salesDate,
-              previousDate: prevStr
-            })
-          });
-          
-          const json = await res.json();
-          
-          if (json.status === 'success' && Array.isArray(json.data)) {
-            this.populateSalesDataFromCalc(json.data);
-            this.showStatus('Sales data calculated from inventory!', 'success');
-          } else {
-            this.showStatus('No inventory data found for calculation', 'error');
-          }
-        } catch (e) {
-          console.error(e);
-          this.showStatus('Unable to fetch inventory data. Please enter manually.', 'error');
-        } finally {
-          this.showLoading(false);
-          document.getElementById('fetchBtn').disabled = false;
-        }
-      }
+  if (!this.currentRoute) {
+    return this.showStatus('Please select a route first!', 'error');
+  }
+
+  const salesDate = this.getValue('salesDate');
+  if (!salesDate) {
+    return this.showStatus('Please select a date!', 'error');
+  }
+
+  // previous day
+  const cur = new Date(salesDate);
+  const prev = new Date(cur);
+  prev.setDate(prev.getDate() - 1);
+  const prevStr = prev.toISOString().split('T')[0];
+
+  this.showStatus('Fetching inventory data…', 'info');
+  this.showLoading(true);
+  document.getElementById('fetchBtn').disabled = true;
+
+  try {
+    const json = await callAppsScript('calculateSalesFromInventory', {
+      route: this.currentRoute,
+      currentDate: salesDate,
+      previousDate: prevStr
+    });
+
+    if (json.status === 'success' && Array.isArray(json.data)) {
+      this.populateSalesDataFromCalc(json.data);
+      this.showStatus('Sales data calculated from inventory!', 'success');
+    } else {
+      this.showStatus('No inventory data found for calculation', 'error');
+    }
+  } catch (e) {
+    console.error(e);
+    this.showStatus('Unable to fetch inventory data. Please enter manually.', 'error');
+  } finally {
+    this.showLoading(false);
+    document.getElementById('fetchBtn').disabled = false;
+  }
+}
+
       
       populateSalesDataFromCalc(rows) {
         // Clear all quantities
@@ -1226,84 +1240,62 @@ if ('serviceWorker' in navigator) {
         }
       }
       
-      async saveData() {
-        if (!this.currentRoute) {
-          return this.showStatus('Please select a route!', 'error');
-        }
-        
-        const date = this.getValue('salesDate');
-        if (!date) {
-          return this.showStatus('Please select a date!', 'error');
-        }
-        
-        const btn = document.getElementById('saveBtn');
-        btn.disabled = true;
-        this.showLoading(true);
-        
-        const payload = this.collectData();
-        
-        try {
-          const res = await this.fetchWithRetry(this.WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              action: 'saveCashReconciliation', 
-              ...payload 
-            })
-          });
-          
-          const json = await res.json();
-          
-          if (json.status === 'success') {
-            this.showStatus('Data saved successfully!', 'success');
-            this.updateSyncStatus('connected');
-          } else {
-            throw new Error(json.error || 'Save failed');
-          }
-        } catch (e) {
-          console.error('Save error:', e);
-          this.pendingChanges.push(payload);
-          this.showStatus('Saved locally. Will sync when connection restored.', 'warning');
-          this.updateSyncStatus('disconnected');
-        } finally {
-          btn.disabled = false;
-          this.showLoading(false);
-        }
+async saveData() {
+  if (!this.currentRoute) {
+    return this.showStatus('Please select a route!', 'error');
+  }
+  
+  const date = this.getValue('salesDate');
+  if (!date) {
+    return this.showStatus('Please select a date!', 'error');
+  }
+  
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  this.showLoading(true);
+  
+  const payload = this.collectData();
+  
+  try {
+    const res = await this.fetchWithRetry(this.WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        action: 'saveCashReconciliation', 
+        ...payload 
+      })
+    });
+  } catch (error) {
+    // handle error if needed
+  } finally {
+    btn.disabled = false;
+    this.showLoading(false);
+  }
+}
+
+async syncPendingChanges() {
+  if (!this.isOnline || this.pendingChanges.length === 0) return;
+
+  const changes = [...this.pendingChanges];
+  this.pendingChanges = [];
+
+  for (const change of changes) {
+    try {
+      const result = await callAppsScript('saveCashReconciliation', change);
+      if (result.status !== 'success') {
+        this.pendingChanges.push(change);
       }
-      
-      async syncPendingChanges() {
-        if (!this.isOnline || this.pendingChanges.length === 0) return;
-        
-        const changes = [...this.pendingChanges];
-        this.pendingChanges = [];
-        
-        for (const change of changes) {
-          try {
-            const response = await this.fetchWithRetry(this.WEBHOOK_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'saveCashReconciliation',
-                ...change
-              })
-            });
-            
-            const result = await response.json();
-            
-            if (result.status !== 'success') {
-              this.pendingChanges.push(change);
-            }
-          } catch (error) {
-            this.pendingChanges.push(change);
-          }
-        }
-        
-        if (this.pendingChanges.length === 0) {
-          this.showStatus('All pending changes synced', 'success');
-        }
-      }
-      
-      collectData() {
+    } catch (error) {
+      this.pendingChanges.push(change);
+    }
+  }
+
+  if (this.pendingChanges.length === 0) {
+    this.showStatus('All pending changes synced', 'success');
+  }
+}
+
+collectData() {
         const salesItems = [];
         
         Object.values(this.SKU_INDEX).forEach(meta => {
