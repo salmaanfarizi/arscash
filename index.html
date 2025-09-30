@@ -525,9 +525,7 @@
 <script>
 // TEMP: disable any existing service workers so old cached requests don't interfere
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(list => {
-    list.forEach(reg => reg.unregister());
-  });
+  navigator.serviceWorker.getRegistrations().then(list => list.forEach(reg => reg.unregister()));
 }
 </script>
 </head>
@@ -787,19 +785,19 @@ async function callAppsScript(action, payload = {}) {
   params.append('action', action);
   params.append('payload', JSON.stringify(payload));
 
-  const res = await fetch(CONFIG.GOOGLE_SCRIPT_URL /* must be /exec */, {
+  const res = await fetch(CONFIG.GOOGLE_SCRIPT_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
     body: params.toString()
-    // IMPORTANT: no other headers (Authorization, X-*, etc.)
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`Apps Script error (${res.status}): ${text}`);
   }
-  return res.json(); // { status, success, data, timestamp }
+  return res.json();
 }
+
 
   // Enhanced Cash Reconciliation App with robust error handling
   class CashReconciliationApp {
