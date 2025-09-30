@@ -523,11 +523,10 @@
 
 <!-- PWA Service Worker Registration -->
 <script>
+// TEMP: disable any existing service workers so old cached requests don't interfere
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(reg => console.log('Service Worker registered'))
-      .catch(err => console.log('Service Worker registration failed'));
+  navigator.serviceWorker.getRegistrations().then(list => {
+    list.forEach(reg => reg.unregister());
   });
 }
 </script>
@@ -1242,37 +1241,35 @@ async function callAppsScript(action, payload = {}) {
       }
       
 async saveData() {
-  if (!this.currentRoute) {
-    return this.showStatus('Please select a route!', 'error');
-  }
-  
+  if (!this.currentRoute) return this.showStatus('Please select a route!', 'error');
   const date = this.getValue('salesDate');
-  if (!date) {
-    return this.showStatus('Please select a date!', 'error');
-  }
-  
+  if (!date) return this.showStatus('Please select a date!', 'error');
+
   const btn = document.getElementById('saveBtn');
   btn.disabled = true;
   this.showLoading(true);
-  
+
   const payload = this.collectData();
-  
+
   try {
-    const res = await this.fetchWithRetry(this.WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        action: 'saveCashReconciliation', 
-        ...payload 
-      })
-    });
-  } catch (error) {
-    // handle error if needed
+    const json = await callAppsScript('saveCashReconciliation', payload);
+    if (json.status === 'success' || json.success) {
+      this.showStatus('Data saved successfully!', 'success');
+      this.updateSyncStatus('connected');
+    } else {
+      throw new Error(json.data || json.error || 'Save failed');
+    }
+  } catch (e) {
+    console.error('Save error:', e);
+    this.pendingChanges.push(payload);
+    this.showStatus('Saved locally. Will sync when connection is restored.', 'warning');
+    this.updateSyncStatus('disconnected');
   } finally {
     btn.disabled = false;
     this.showLoading(false);
   }
 }
+
 
 async syncPendingChanges() {
   if (!this.isOnline || this.pendingChanges.length === 0) return;
@@ -1513,9 +1510,8 @@ collectData() {
     
     // Initialize app
     const app = new CashReconciliationApp();
-    document.addEventListener('DOMContentLoaded', () => app.init());
-   
-    document.addEventListener('DOMContentLoaded', () => app.init());
+document.addEventListener('DOMContentLoaded', () => app.init());
+
   </script>
   <script>
     // Performance monitoring
