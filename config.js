@@ -1,7 +1,7 @@
-// Frontend config ONLY
+// config.js
 const CONFIG = {
-  // Use the Netlify Function endpoint (same origin)
-  GOOGLE_SCRIPT_URL: '/.netlify/functions/gas',
-  RETRY_ATTEMPTS: 3,
-  RETRY_DELAY: 2000
+  GOOGLE_SCRIPT_URL: '/.netlify/functions/gas',   // ← use the Netlify function
+  HEARTBEAT_INTERVAL: 15000,
+  POLLING_INTERVAL: 5000,
+  USER_ID: localStorage.getItem('userId') || generateUserId()
 };
