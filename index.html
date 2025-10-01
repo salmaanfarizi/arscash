@@ -539,12 +539,12 @@ if ('serviceWorker' in navigator) {
 
     <div class="route-section">
       <div class="route-grid">
-        <button class="route-btn" onclick="app.selectRoute('Al-Hasa One')">Al-Hasa 1</button>
-        <button class="route-btn" onclick="app.selectRoute('Al-Hasa Two')">Al-Hasa 2</button>
-        <button class="route-btn" onclick="app.selectRoute('Al-Hasa Three')">Al-Hasa 3</button>
-        <button class="route-btn" onclick="app.selectRoute('Al-Hasa Four')">Al-Hasa 4</button>
-        <button class="route-btn" onclick="app.selectRoute('Al-Hasa Wholesale')">Wholesale</button>
-      </div>
+  <button class="route-btn" data-route="Al-Hasa 1" onclick="app.selectRoute('Al-Hasa 1')">Al-Hasa 1</button>
+  <button class="route-btn" data-route="Al-Hasa 2" onclick="app.selectRoute('Al-Hasa 2')">Al-Hasa 2</button>
+  <button class="route-btn" data-route="Al-Hasa 3" onclick="app.selectRoute('Al-Hasa 3')">Al-Hasa 3</button>
+  <button class="route-btn" data-route="Al-Hasa 4" onclick="app.selectRoute('Al-Hasa 4')">Al-Hasa 4</button>
+  <button class="route-btn" data-route="Al-Hasa Wholesale" onclick="app.selectRoute('Al-Hasa Wholesale')">Wholesale</button>
+</div>
       <div class="date-info">
         <input type="date" class="date-input" id="salesDate">
         <div class="info-display">
@@ -802,22 +802,34 @@ async function callAppsScript(action, payload = {}) {
   // Enhanced Cash Reconciliation App with robust error handling
   class CashReconciliationApp {
     constructor() {
-        // Configuration from external config.js
-        this.WEBHOOK_URL = CONFIG.GOOGLE_SCRIPT_URL;
-        this.RETRY_ATTEMPTS = CONFIG.RETRY_ATTEMPTS || 3;
-        this.RETRY_DELAY = CONFIG.RETRY_DELAY || 2000;
-        
-        // State
-        this.currentRoute = '';
-        this.CATALOG = {};
-        this.SKU_INDEX = {};
-        this.isOnline = navigator.onLine;
-        this.pendingChanges = [];
-        
-        // Bind event handlers
-        this.bindEventHandlers();
-      }
-      
+  // Configuration from external config.js
+  this.WEBHOOK_URL = CONFIG.GOOGLE_SCRIPT_URL;
+  this.RETRY_ATTEMPTS = CONFIG.RETRY_ATTEMPTS || 3;
+  this.RETRY_DELAY = CONFIG.RETRY_DELAY || 2000;
+
+  // State
+  this.currentRoute = '';
+  this.CATALOG = {};
+  this.SKU_INDEX = {};
+  this.isOnline = navigator.onLine;
+  this.pendingChanges = [];
+
+  // NEW: route aliases (buttons said “One/Two/…”, sheets expect 1/2/…)
+  this.ROUTE_ALIASES = {
+    'Al-Hasa One': 'Al-Hasa 1',
+    'Al-Hasa Two': 'Al-Hasa 2',
+    'Al-Hasa Three': 'Al-Hasa 3',
+    'Al-Hasa Four': 'Al-Hasa 4'
+  };
+
+  // Bind event handlers
+  this.bindEventHandlers();
+}
+
+      normalizeRoute(name) {
+  return this.ROUTE_ALIASES[name] || name;
+}
+
       bindEventHandlers() {
         // Online/offline handlers
         window.addEventListener('online', () => this.handleOnlineStatus(true));
@@ -912,20 +924,20 @@ async function callAppsScript(action, payload = {}) {
       }
       
       selectRoute(route) {
-        this.currentRoute = route;
-        document.getElementById('selectedRoute').textContent = route;
-        
-        document.querySelectorAll('.route-btn').forEach(btn => {
-          btn.classList.remove('active');
-          const btnText = btn.textContent;
-          if (btnText.includes(route.replace('Al-Hasa ', '')) || 
-              (btnText === 'Wholesale' && route === 'Al-Hasa Wholesale')) {
-            btn.classList.add('active');
-          }
-        });
-        
-        this.saveToStorage();
-      }
+  route = this.normalizeRoute(route);
+  this.currentRoute = route;
+  document.getElementById('selectedRoute').textContent = route;
+
+  document.querySelectorAll('.route-btn').forEach(btn => {
+    btn.classList.remove('active');
+    // prefer data-route when present
+    const btnRoute = btn.dataset.route || btn.textContent.trim();
+    if (btnRoute === route) btn.classList.add('active');
+  });
+
+  this.saveToStorage();
+}
+
       
       async loadCatalog() {
         this.setCatalogStatus('loading');
@@ -1415,7 +1427,8 @@ collectData() {
           
           if (data.route) this.selectRoute(data.route);
           if (data.date) this.setValue('salesDate', data.date);
-          
+          if (data.route) this.selectRoute(this.normalizeRoute(data.route));
+
           // Sales items
           (data.salesItems || []).forEach(i => {
             if (this.SKU_INDEX[i.code]) {
