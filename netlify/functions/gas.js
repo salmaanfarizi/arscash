@@ -2,7 +2,7 @@
 // netlify/functions/gas.js
 const APPS_SCRIPT_URL =
   process.env.APPS_SCRIPT_URL ||
-  "https://script.google.com/macros/s/AKfycbwK1HgzVul54WtkboHV5OTr8Cqm-ZNeghvyLhsf1akxvsUdlao1UiZIM_BLJ-eiErwP3A/exec"; // replace if desired
+  "https://script.google.com/macros/s/AKfycby69Ngv7yflRCqkOOtRznWOtzcJDMLltSFGkdWMZmTyYYiYvBNZrIkmffXpcdQTrVqk/exec"; // replace if desired
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
