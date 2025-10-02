@@ -1,56 +1,62 @@
 // netlify/functions/gas.js
-// Proxies the browser request to Google Apps Script to avoid CORS.
-export async function handler(event) {
-  const cors = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
+// This function acts as a proxy to avoid CORS issues with Google Apps Script
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: cors, body: '' };
+exports.handler = async (event, context) => {
+  // Your actual Google Apps Script Web App URL
+  const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby69Ngv7yflRCqkOOtRznWOtzcJDMLltSFGkdWMZmTyYYiYvBNZrIkmffXpcdQTrVqk/exec';
+  
+  // Only allow POST requests
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      body: JSON.stringify({ error: 'Method not allowed' })
+    };
   }
-
-  const GAS_URL = 'https://script.google.com/macros/s/AKfycby69Ngv7yflRCqkOOtRznWOtzcJDMLltSFGkdWMZmTyYYiYvBNZrIkmffXpcdQTrVqk/exec';
 
   try {
-    let action = '';
-    let payload = {};
-
-    // Accept either form-encoded (from your helper) or JSON
-    const ct = event.headers['content-type'] || '';
-    if (ct.includes('application/x-www-form-urlencoded')) {
-      const params = new URLSearchParams(event.body);
-      action = params.get('action') || '';
-      payload = JSON.parse(params.get('payload') || '{}');
-    } else if (ct.includes('application/json')) {
-      const body = JSON.parse(event.body || '{}');
-      action = body.action || '';
-      payload = body.payload || {};
-    }
-
-    // Always forward to GAS as form-POST (no preflight)
-    const form = new URLSearchParams();
-    form.append('action', action);
-    form.append('payload', JSON.stringify(payload));
-
-    const res = await fetch(GAS_URL, {
+    // Parse the incoming request body
+    const body = event.body ? JSON.parse(event.body) : {};
+    
+    // Forward the request to Google Apps Script
+    const response = await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-      body: form.toString(),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+      },
+      body: new URLSearchParams({
+        action: body.action,
+        payload: JSON.stringify(body)
+      }).toString()
     });
 
-    const text = await res.text(); // GAS returns JSON text
+    if (!response.ok) {
+      throw new Error(`Google Apps Script returned ${response.status}`);
+    }
+
+    const data = await response.json();
+
     return {
-      statusCode: res.status,
-      headers: { ...cors, 'Content-Type': 'application/json' },
-      body: text,
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type'
+      },
+      body: JSON.stringify(data)
     };
-  } catch (err) {
+
+  } catch (error) {
+    console.error('Proxy error:', error);
     return {
       statusCode: 500,
-      headers: cors,
-      body: JSON.stringify({ status: 'error', error: String(err) }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
+      body: JSON.stringify({ 
+        status: 'error', 
+        error: error.message 
+      })
     };
   }
-}
+};
