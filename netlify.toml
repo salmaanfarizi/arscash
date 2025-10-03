@@ -1,3 +1,7 @@
 [build]
-  functions = "netlify/functions"
-  publish   = "."   # or the folder where index.html lives
+  command = ""          # static site; leave blank
+  publish = "."         # directory to serve (adjust if you have /dist)
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
