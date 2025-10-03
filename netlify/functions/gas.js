@@ -1,76 +1,38 @@
-
 // netlify/functions/gas.js
-const APPS_SCRIPT_URL =
-  process.env.APPS_SCRIPT_URL ||
-  "https://script.google.com/macros/s/AKfycby69Ngv7yflRCqkOOtRznWOtzcJDMLltSFGkdWMZmTyYYiYvBNZrIkmffXpcdQTrVqk/exec"; // replace if desired
-
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
-
-exports.handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 200, headers: CORS_HEADERS, body: "OK" };
-  }
-  if (event.httpMethod !== "POST") {
-    return {
-      statusCode: 405,
-      headers: CORS_HEADERS,
-      body: JSON.stringify({ success: false, error: "Method Not Allowed" }),
-    };
+export const handler = async (event) => {
+  // CORS (harmless even on same-origin)
+  const cors = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'content-type',
+  };
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers: cors, body: '' };
   }
 
-  let raw = event.body || "";
-  if (event.isBase64Encoded) raw = Buffer.from(raw, "base64").toString("utf8");
-
-  let action, payload;
-  try {
-    const p = new URLSearchParams(raw);
-    action = p.get("action") || "ping";
-    const pr = p.get("payload");
-    payload = pr ? JSON.parse(pr) : {};
-  } catch {
-    try {
-      const j = JSON.parse(raw);
-      action = j.action || "ping";
-      payload = j.payload || {};
-    } catch {
-      return {
-        statusCode: 400,
-        headers: CORS_HEADERS,
-        body: JSON.stringify({ success: false, error: "Bad request body" }),
-      };
-    }
-  }
-
-  const out = new URLSearchParams();
-  out.append("action", action);
-  out.append("payload", JSON.stringify(payload));
+  const GAS_URL =
+    process.env.GAS_WEBAPP_URL ||
+    'https://script.google.com/macros/s/AKfycby69Ngv7yflRCqkOOtRznWOtzcJDMLltSFGkdWMZmTyYYiYvBNZrIkmffXpcdQTrVqk/exec';
 
   try {
-    const resp = await fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-      body: out.toString(),
+    // IMPORTANT: forward the body AS-IS and keep urlencoded content-type
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+      body: event.body,
     });
 
-    const text = await resp.text();
-    let data;
-    try { data = JSON.parse(text); }
-    catch { data = { success: false, error: "Non-JSON response from Apps Script", raw: text }; }
-
+    const text = await res.text(); // GAS returns JSON text
     return {
-      statusCode: 200,
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      statusCode: res.status,
+      headers: { ...cors, 'content-type': 'application/json' },
+      body: text,
     };
   } catch (err) {
     return {
-      statusCode: 502,
-      headers: CORS_HEADERS,
-      body: JSON.stringify({ success: false, error: String(err) }),
+      statusCode: 500,
+      headers: cors,
+      body: JSON.stringify({ status: 'error', error: String(err) }),
     };
   }
 };
