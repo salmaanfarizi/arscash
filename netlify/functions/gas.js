@@ -9,20 +9,31 @@ export const handler = async (event) => {
     return { statusCode: 204, headers: cors, body: '' };
   }
 
-  const GAS_URL = process.env.GAS_WEBAPP_URL || 'https://script.google.com/macros/s/AKfycby69Ngv7yflRCqkOOtRznWOtzcJDMLltSFGkdWMZmTyYYiYvBNZrIkmffXpcdQTrVqk/exec';
+  const GAS_URL = process.env.GAS_WEBAPP_URL ||
+    'https://script.google.com/macros/s/AKfycby69Ngv7yflRCqkOOtRznWOtzcJDMLltSFGkdWMZmTyYYiYvBNZrIkmffXpcdQTrVqk/exec';
 
   try {
+    const incomingCT =
+      event.headers['content-type'] ||
+      event.headers['Content-Type'] ||
+      'application/json';
+
+    const bodyToSend = event.isBase64Encoded
+      ? Buffer.from(event.body || '', 'base64').toString('utf8')
+      : (event.body || '');
+
     const res = await fetch(GAS_URL, {
       method: 'POST',
-      // FORWARD THE INCOMING CONTENT-TYPE & BODY AS-IS
-      headers: { 'content-type': event.headers['content-type'] || 'application/json' },
-      body: event.body,
+      headers: { 'content-type': incomingCT },
+      body: bodyToSend,
     });
 
-    const text = await res.text(); // GAS returns JSON text
+    const text = await res.text();
+    const passthroughCT = res.headers.get('content-type') || 'application/json';
+
     return {
       statusCode: res.status,
-      headers: { ...cors, 'content-type': 'application/json' },
+      headers: { ...cors, 'content-type': passthroughCT },
       body: text,
     };
   } catch (err) {

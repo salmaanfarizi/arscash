@@ -806,27 +806,34 @@ startHeartbeat() {
 }
 
   // Fixed callAppsScript to use JSON POST
-  async callAppsScript(action, payload = {}) {
+  // in CashReconciliationApp class
+async callAppsScript(action, payload = {}) {
+  try {
+    const res = await fetch(this.WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...payload })
+    });
+
+    const text = await res.text();
+    let data;
     try {
-      const response = await fetch(this.WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ action, ...payload })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('API call failed:', error);
-      throw error;
+      data = JSON.parse(text);
+    } catch {
+      // Non-JSON: likely HTML from a login/error page
+      console.error('Non-JSON response from proxy/GAS:', text.slice(0, 400));
+      throw new Error('Server returned non-JSON (check GAS deployment URL & access).');
     }
+
+    if (!res.ok) throw new Error(data?.data || data?.error || `HTTP ${res.status}`);
+    return data;
+  } catch (err) {
+    console.error('API call failed:', err);
+    throw err;
   }
+}
+
+
   
   async init() {
     try {
