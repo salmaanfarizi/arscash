@@ -661,45 +661,36 @@
             </div>
           </div>
 
-          <div class="cash-breakdown">
-            <div class="denomination">
-              <span class="denom-label">500</span>
-              <input type="number" class="denom-input" id="note500" placeholder="0" onchange="app.calculateCashNotes()">
-              <span class="denom-value" id="val500">0</span>
-            </div>
-            <div class="denomination">
-              <span class="denom-label">100</span>
-              <input type="number" class="denom-input" id="note100" placeholder="0" onchange="app.calculateCashNotes()">
-              <span class="denom-value" id="val100">0</span>
-            </div>
-            <div class="denomination">
-              <span class="denom-label">50</span>
-              <input type="number" class="denom-input" id="note50" placeholder="0" onchange="app.calculateCashNotes()">
-              <span class="denom-value" id="val50">0</span>
-            </div>
-            <div class="denomination">
-              <span class="denom-label">20</span>
-              <input type="number" class="denom-input" id="note20" placeholder="0" onchange="app.calculateCashNotes()">
-              <span class="denom-value" id="val20">0</span>
-            </div>
-            <div class="denomination">
-              <span class="denom-label">10</span>
-              <input type="number" class="denom-input" id="note10" placeholder="0" onchange="app.calculateCashNotes()">
-              <span class="denom-value" id="val10">0</span>
-            </div>
-            <div class="denomination">
-              <span class="denom-label">5</span>
-              <input type="number" class="denom-input" id="note5" placeholder="0" onchange="app.calculateCashNotes()">
-              <span class="denom-value" id="val5">0</span>
-            </div>
-          </div>
+          <div class="cash-breakdown" style="margin-top:10px;">
+  <div class="denomination">
+    <span class="denom-label">2</span>
+    <input type="number" class="denom-input" id="coin2" placeholder="0" onchange="app.calculateCoins()">
+    <span class="denom-value" id="valc2">0</span>
+  </div>
+  <div class="denomination">
+    <span class="denom-label">1</span>
+    <input type="number" class="denom-input" id="coin1" placeholder="0" onchange="app.calculateCoins()">
+    <span class="denom-value" id="valc1">0</span>
+  </div>
+  <div class="denomination">
+    <span class="denom-label">0.50</span>
+    <input type="number" class="denom-input" id="coin050" placeholder="0" onchange="app.calculateCoins()">
+    <span class="denom-value" id="valc050">0</span>
+  </div>
+  <div class="denomination">
+    <span class="denom-label">0.25</span>
+    <input type="number" class="denom-input" id="coin025" placeholder="0" onchange="app.calculateCoins()">
+    <span class="denom-value" id="valc025">0</span>
+  </div>
+</div>
+
 
           <div class="input-group" style="margin-top:15px;">
             <label class="input-label">Coins Total</label>
             <div class="input-wrapper">
               <span class="currency-prefix">SAR</span>
-              <input type="number" class="input-field" id="coinsTotal" step="0.01" placeholder="0.00"
-                     onchange="app.calculateActualCash()">
+             <input type="number" class="input-field" id="coinsTotal" step="0.01" placeholder="0.00" readonly>
+
             </div>
           </div>
 
@@ -778,7 +769,7 @@ class CashReconciliationApp {
     this.CATALOG = {};
     this.SKU_INDEX = {};
     this.isOnline = navigator.onLine;
-    this.pendingChanges = [];
+    this.pendingChanges = JSON.parse(localStorage.getItem('pendingChanges') || '[]');
 
     // Bind event handlers
     this.bindEventHandlers();
@@ -796,10 +787,23 @@ class CashReconciliationApp {
     if (isOnline) {
       this.showStatus('Back online - syncing data', 'info');
       this.syncPendingChanges();
+      this.startHeartbeat();
     } else {
       this.showStatus('Working offline - data will sync when connection restored', 'warning');
+      if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     }
   }
+startHeartbeat() {
+  if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+  this.heartbeatTimer = setInterval(() => {
+    this.callAppsScript('heartbeat', {
+      userId: CONFIG.USER_ID,
+      route: this.currentRoute,
+      module: 'cash',
+      userName: 'Web Client'
+    }).catch(() => {});
+  }, CONFIG.HEARTBEAT_INTERVAL || 15000);
+}
 
   // Fixed callAppsScript to use JSON POST
   async callAppsScript(action, payload = {}) {
@@ -841,6 +845,7 @@ class CashReconciliationApp {
       
       // Check connection
       await this.checkConnection();
+      this.startHeartbeat();
     } catch (error) {
       console.error('Init error:', error);
       this.showStatus('Starting in offline mode', 'warning');
@@ -973,7 +978,7 @@ class CashReconciliationApp {
           <td>${item.code}</td>
           <td>${item.name || ''}</td>
           <td>${item.unit || ''}</td>
-          <td>${Number(item.price || 0)}</td>
+          <td>${Number(item.price || 0).toFixed(2)}</td>
           <td>
             <input type="number" class="qty-input" id="qty_${item.code}"
                    placeholder="0" min="0"
@@ -1149,7 +1154,23 @@ class CashReconciliationApp {
     this.setValue('cashNotes', total.toFixed(2));
     this.calculateActualCash();
   }
-  
+  calculateCoins() {
+  const c2 = this.toNum(this.getValue('coin2')) * 2;
+  const c1 = this.toNum(this.getValue('coin1')) * 1;
+  const c050 = this.toNum(this.getValue('coin050')) * 0.5;
+  const c025 = this.toNum(this.getValue('coin025')) * 0.25;
+
+  this.setText('valc2', c2.toFixed(2));
+  this.setText('valc1', c1.toFixed(2));
+  this.setText('valc050', c050.toFixed(2));
+  this.setText('valc025', c025.toFixed(2));
+
+  const coins = c2 + c1 + c050 + c025;
+  this.setValue('coinsTotal', coins.toFixed(2));
+
+  this.calculateActualCash();
+}
+
   calculateActualCash() {
     const notes = this.toNum(this.getValue('cashNotes'));
     const coins = this.toNum(this.getValue('coinsTotal'));
@@ -1205,6 +1226,7 @@ class CashReconciliationApp {
     } catch (e) {
       console.error('Save error:', e);
       this.pendingChanges.push(payload);
+      localStorage.setItem('pendingChanges', JSON.stringify(this.pendingChanges));
       this.showStatus('Saved locally. Will sync when connection is restored.', 'warning');
       this.updateSyncStatus('disconnected');
     } finally {
@@ -1214,26 +1236,29 @@ class CashReconciliationApp {
   }
 
   async syncPendingChanges() {
-    if (!this.isOnline || this.pendingChanges.length === 0) return;
+  if (!this.isOnline || this.pendingChanges.length === 0) return;
 
-    const changes = [...this.pendingChanges];
-    this.pendingChanges = [];
+  const changes = [...this.pendingChanges];
+  this.pendingChanges = [];
+  localStorage.setItem('pendingChanges', JSON.stringify(this.pendingChanges));
 
-    for (const change of changes) {
-      try {
-        const result = await this.callAppsScript('saveCashReconciliation', change);
-        if (result.status !== 'success') {
-          this.pendingChanges.push(change);
-        }
-      } catch (error) {
+  for (const change of changes) {
+    try {
+      const result = await this.callAppsScript('saveCashReconciliation', change);
+      if (result.status !== 'success' && !result.success) {
         this.pendingChanges.push(change);
       }
+    } catch {
+      this.pendingChanges.push(change);
     }
-
-    if (this.pendingChanges.length === 0) {
-      this.showStatus('All pending changes synced', 'success');
-    }
+    localStorage.setItem('pendingChanges', JSON.stringify(this.pendingChanges));
   }
+
+  if (this.pendingChanges.length === 0) {
+    this.showStatus('All pending changes synced', 'success');
+  }
+}
+
 
   collectData() {
     const salesItems = [];
@@ -1275,7 +1300,12 @@ class CashReconciliationApp {
           '50': this.toNum(this.getValue('note50')),
           '20': this.toNum(this.getValue('note20')),
           '10': this.toNum(this.getValue('note10')),
-          '5': this.toNum(this.getValue('note5'))
+          '5': this.toNum(this.getValue('note5')),
+          '2': this.toNum(this.getValue('coin2')),
+'1': this.toNum(this.getValue('coin1')),
+'0.50': this.toNum(this.getValue('coin050')),
+'0.25': this.toNum(this.getValue('coin025'))
+
         }
       },
       coins: this.toNum(this.getValue('coinsTotal')),
@@ -1313,9 +1343,13 @@ class CashReconciliationApp {
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `cash_reconciliation_${this.currentRoute}_${date}.csv`;
-    a.click();
+a.href = url;
+a.download = `cash_reconciliation_${this.currentRoute}_${date}.csv`;
+document.body.appendChild(a);
+a.click();
+a.remove();
+URL.revokeObjectURL(url);
+
     
     this.showStatus('Report exported!', 'success');
   }

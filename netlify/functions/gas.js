@@ -1,6 +1,5 @@
 // netlify/functions/gas.js
 export const handler = async (event) => {
-  // CORS (harmless even on same-origin)
   const cors = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST,OPTIONS',
@@ -10,15 +9,13 @@ export const handler = async (event) => {
     return { statusCode: 204, headers: cors, body: '' };
   }
 
-  const GAS_URL =
-    process.env.GAS_WEBAPP_URL ||
-    'https://script.google.com/macros/s/AKfycby69Ngv7yflRCqkOOtRznWOtzcJDMLltSFGkdWMZmTyYYiYvBNZrIkmffXpcdQTrVqk/exec';
+  const GAS_URL = process.env.GAS_WEBAPP_URL || 'https://script.google.com/macros/s/AKfycby69Ngv7yflRCqkOOtRznWOtzcJDMLltSFGkdWMZmTyYYiYvBNZrIkmffXpcdQTrVqk/exec';
 
   try {
-    // IMPORTANT: forward the body AS-IS and keep urlencoded content-type
     const res = await fetch(GAS_URL, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+      // FORWARD THE INCOMING CONTENT-TYPE & BODY AS-IS
+      headers: { 'content-type': event.headers['content-type'] || 'application/json' },
       body: event.body,
     });
 
